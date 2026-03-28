@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { mcpServer } from './mastra/index.js';
 
-const PORT = parseInt(process.env.MCP_PORT || '3001', 10);
+const PORT = parseInt(process.env.PORT || process.env.MCP_PORT || '3001', 10);
 const API_KEY = process.env.MCP_API_KEY;
 
 if (!API_KEY) {
