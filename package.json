@@ -7,8 +7,7 @@
     "dev": "mastra dev",
     "dev:http": "npx tsx --env-file=.env src/server.ts",
     "build": "tsc",
-    "start": "node dist/mastra/index.js",
-    "start:http": "node --env-file=.env dist/server.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@mastra/core": "latest",
