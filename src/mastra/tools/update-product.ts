@@ -3,11 +3,11 @@ import { z } from 'zod';
 import { getOdooClient } from '../../lib/odoo-client.js';
 
 export const updateProduct = createTool({
-  id: 'update_product',
+  id: 'odoo_update_product',
   description:
     'Actualiza un producto existente en Odoo por su ID. Permite cambiar nombre, descripción, precios, código interno, barcode y categoría.',
   inputSchema: z.object({
-    id: z.number().describe('ID del producto en Odoo (product.template)'),
+    id: z.number().describe('ID del producto (product.template)'),
     name: z.string().optional().describe('Nuevo nombre'),
     description: z.string().optional().describe('Nueva descripción'),
     cost_price: z.number().optional().describe('Nuevo precio de costo'),
@@ -31,10 +31,9 @@ export const updateProduct = createTool({
     },
   },
   execute: async (input) => {
-    const odoo = getOdooClient();
     const { id, ...values } = input;
-
     try {
+      const odoo = getOdooClient();
       await odoo.updateProduct(id, values);
       return { id, status: 'updated' as const };
     } catch (error: any) {

@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { parseExcelBuffer } from '../../lib/xlsx-parser.js';
 
 export const parseExcel = createTool({
-  id: 'parse_excel',
+  id: 'odoo_parse_excel',
   description:
-    'Parsea un archivo Excel (.xlsx) con una lista de productos. Detecta automáticamente las columnas por nombre del header (soporta español e inglés, variantes como "Precio Costo", "Cost Price", "SKU", "Codigo", etc). Si no detecta headers, usa orden fijo. Retorna productos con nombre, descripción, precios, código interno y barcode.',
+    'Parsea un archivo Excel (.xlsx) con una lista de productos. Detecta automáticamente las columnas por nombre del header (español e inglés). Si no detecta headers, usa orden fijo. Retorna productos parseados para revisión antes de crear en Odoo.',
   inputSchema: z.object({
     fileBase64: z.string().describe('Contenido del archivo .xlsx codificado en base64'),
   }),
@@ -24,6 +24,7 @@ export const parseExcel = createTool({
     detected_columns: z.record(z.number()),
     total_rows: z.number(),
     parsed_rows: z.number(),
+    error: z.string().optional(),
   }),
   mcp: {
     annotations: {
@@ -34,7 +35,15 @@ export const parseExcel = createTool({
     },
   },
   execute: async (input) => {
-    const buffer = Buffer.from(input.fileBase64, 'base64');
-    return parseExcelBuffer(buffer);
+    try {
+      const buffer = Buffer.from(input.fileBase64, 'base64');
+      return parseExcelBuffer(buffer);
+    } catch (error: any) {
+      return {
+        products: [], warnings: [], detected_columns: {},
+        total_rows: 0, parsed_rows: 0,
+        error: error?.message || String(error),
+      };
+    }
   },
 });

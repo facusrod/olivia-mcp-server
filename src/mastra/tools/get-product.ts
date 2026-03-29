@@ -1,17 +1,19 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getOdooClient } from '../../lib/odoo-client.js';
+import { OdooProductSchema } from '../../lib/schemas.js';
 
 export const getProductById = createTool({
-  id: 'get_product_by_id',
+  id: 'odoo_get_product_by_id',
   description:
-    'Obtiene un producto específico de Odoo por su ID. Retorna todos los campos: nombre, precios, stock, categoría, código interno y barcode.',
+    'Obtiene un producto específico de Odoo por su ID. Retorna todos los campos del producto.',
   inputSchema: z.object({
     id: z.number().describe('ID del producto en Odoo'),
   }),
   outputSchema: z.object({
-    product: z.any().nullable(),
+    product: OdooProductSchema.nullable(),
     found: z.boolean(),
+    error: z.string().optional(),
   }),
   mcp: {
     annotations: {
@@ -22,8 +24,12 @@ export const getProductById = createTool({
     },
   },
   execute: async (input) => {
-    const odoo = getOdooClient();
-    const product = await odoo.getProductById(input.id);
-    return { product, found: product !== null };
+    try {
+      const odoo = getOdooClient();
+      const product = await odoo.getProductById(input.id);
+      return { product, found: product !== null };
+    } catch (error: any) {
+      return { product: null, found: false, error: error?.message || String(error) };
+    }
   },
 });

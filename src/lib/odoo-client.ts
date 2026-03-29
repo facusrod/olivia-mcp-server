@@ -33,11 +33,17 @@ export interface CreateProductResult {
   error?: string;
 }
 
-export interface UpdateProductResult {
-  id: number;
-  name: string;
-  status: 'updated' | 'error';
-  error?: string;
+/**
+ * Odoo devuelve `false` en vez de null para campos vacíos.
+ * Esta función normaliza esos campos a null.
+ */
+export function cleanOdooProduct(p: any): any {
+  return {
+    ...p,
+    default_code: typeof p.default_code === 'string' ? p.default_code : null,
+    barcode: typeof p.barcode === 'string' ? p.barcode : null,
+    description_sale: typeof p.description_sale === 'string' ? p.description_sale : null,
+  };
 }
 
 class OdooClient {
@@ -48,11 +54,18 @@ class OdooClient {
 
   constructor() {
     this.config = {
-      url: process.env.ODOO_URL || 'http://localhost:8069',
+      url: process.env.ODOO_URL || '',
       db: process.env.ODOO_DB || '',
       username: process.env.ODOO_USERNAME || '',
       password: process.env.ODOO_PASSWORD || '',
     };
+
+    if (!this.config.url || !this.config.db || !this.config.username || !this.config.password) {
+      throw new Error(
+        'Missing required env vars: ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD. ' +
+        'Set them in claude_desktop_config.json → mcpServers → env.'
+      );
+    }
 
     const cfClientId = process.env.CF_ACCESS_CLIENT_ID;
     const cfClientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
@@ -146,13 +159,15 @@ class OdooClient {
     'categ_id', 'default_code', 'barcode', 'description_sale', 'type',
   ];
 
-  async searchProducts(query: string, limit: number = 20): Promise<any[]> {
-    return this.executeKw('product.product', 'search_read', [
+  async searchProducts(query: string, limit: number = 20, offset: number = 0): Promise<any[]> {
+    const raw = await this.executeKw('product.product', 'search_read', [
       ['|', '|', ['name', 'ilike', query], ['default_code', 'ilike', query], ['barcode', 'ilike', query]],
     ], {
       fields: OdooClient.PRODUCT_FIELDS,
       limit,
+      offset,
     });
+    return (raw || []).map(cleanOdooProduct);
   }
 
   async getProductById(id: number): Promise<any | null> {
@@ -162,21 +177,20 @@ class OdooClient {
       fields: OdooClient.PRODUCT_FIELDS,
       limit: 1,
     });
-    return products.length > 0 ? products[0] : null;
+    return products.length > 0 ? cleanOdooProduct(products[0]) : null;
   }
 
-  async getLowStockProducts(threshold: number = 10): Promise<any[]> {
-    return this.executeKw('product.product', 'search_read', [
+  async getLowStockProducts(threshold: number = 10, limit: number = 50, offset: number = 0): Promise<any[]> {
+    const raw = await this.executeKw('product.product', 'search_read', [
       [['qty_available', '<=', threshold], ['qty_available', '>', 0]],
     ], {
       fields: OdooClient.PRODUCT_FIELDS,
-      limit: 50,
+      limit,
+      offset,
     });
+    return (raw || []).map(cleanOdooProduct);
   }
 
-  /**
-   * Ranking de ventas combinando POS + eCommerce.
-   */
   async getSalesRanking(days: number = 30, limit: number = 10, source: 'all' | 'pos' | 'ecommerce' = 'all'): Promise<any[]> {
     const date = new Date();
     date.setDate(date.getDate() - days);
@@ -184,7 +198,6 @@ class OdooClient {
 
     const productSales: Record<number, { id: number; name: string; total_qty: number; total_revenue: number; source: string }> = {};
 
-    // POS sales
     if (source === 'all' || source === 'pos') {
       const posLines = await this.executeKw('pos.order.line', 'search_read', [
         [['order_id.date_order', '>=', dateStr], ['order_id.state', 'in', ['paid', 'done', 'invoiced']]],
@@ -203,7 +216,6 @@ class OdooClient {
       }
     }
 
-    // eCommerce sales
     if (source === 'all' || source === 'ecommerce') {
       try {
         const ecomLines = await this.executeKw('sale.order.line', 'search_read', [
@@ -237,16 +249,16 @@ class OdooClient {
       .slice(0, limit);
   }
 
-  /**
-   * Historial de ventas POS + eCommerce.
-   */
   async getSalesHistory(options: {
     dateFrom?: string;
     dateTo?: string;
     limit?: number;
+    offset?: number;
     source?: 'all' | 'pos' | 'ecommerce';
   } = {}): Promise<{ pos_orders: any[]; ecom_orders: any[] }> {
     const source = options.source || 'all';
+    const limit = options.limit || 500;
+    const offset = options.offset || 0;
     let posOrders: any[] = [];
     let ecomOrders: any[] = [];
 
@@ -257,7 +269,8 @@ class OdooClient {
 
       posOrders = await this.executeKw('pos.order', 'search_read', [filters], {
         fields: ['id', 'name', 'date_order', 'amount_total', 'amount_tax', 'partner_id', 'pos_reference'],
-        limit: options.limit || 500,
+        limit,
+        offset,
         order: 'date_order desc',
       });
     }
@@ -270,7 +283,8 @@ class OdooClient {
 
         ecomOrders = await this.executeKw('sale.order', 'search_read', [filters], {
           fields: ['id', 'name', 'date_order', 'amount_total', 'partner_id', 'state'],
-          limit: options.limit || 500,
+          limit,
+          offset,
           order: 'date_order desc',
         });
       } catch {
@@ -278,7 +292,7 @@ class OdooClient {
       }
     }
 
-    return { pos_orders: posOrders, ecom_orders: ecomOrders };
+    return { pos_orders: posOrders || [], ecom_orders: ecomOrders || [] };
   }
 
   // ========== ESCRITURA ==========
