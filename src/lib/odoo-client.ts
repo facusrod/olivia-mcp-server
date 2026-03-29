@@ -13,10 +13,30 @@ interface OdooConfig {
   password: string;
 }
 
+export interface ProductInput {
+  name: string;
+  description?: string;
+  cost_price?: number;
+  sale_price?: number;
+  default_code?: string;
+  barcode?: string;
+  categ_id?: number;
+  type?: string;
+  sale_ok?: boolean;
+  purchase_ok?: boolean;
+}
+
 export interface CreateProductResult {
   name: string;
   odoo_id?: number;
   status: 'created' | 'error';
+  error?: string;
+}
+
+export interface UpdateProductResult {
+  id: number;
+  name: string;
+  status: 'updated' | 'error';
   error?: string;
 }
 
@@ -121,56 +141,95 @@ class OdooClient {
 
   // ========== LECTURA ==========
 
-  /**
-   * Busca productos por nombre o código interno.
-   */
+  private static readonly PRODUCT_FIELDS = [
+    'id', 'name', 'list_price', 'standard_price', 'qty_available',
+    'categ_id', 'default_code', 'barcode', 'description_sale', 'type',
+  ];
+
   async searchProducts(query: string, limit: number = 20): Promise<any[]> {
     return this.executeKw('product.product', 'search_read', [
-      ['|', ['name', 'ilike', query], ['default_code', 'ilike', query]],
+      ['|', '|', ['name', 'ilike', query], ['default_code', 'ilike', query], ['barcode', 'ilike', query]],
     ], {
-      fields: ['id', 'name', 'list_price', 'standard_price', 'qty_available', 'categ_id', 'default_code', 'barcode'],
+      fields: OdooClient.PRODUCT_FIELDS,
       limit,
     });
   }
 
-  /**
-   * Obtiene productos con stock bajo.
-   */
+  async getProductById(id: number): Promise<any | null> {
+    const products = await this.executeKw('product.product', 'search_read', [
+      [['id', '=', id]],
+    ], {
+      fields: OdooClient.PRODUCT_FIELDS,
+      limit: 1,
+    });
+    return products.length > 0 ? products[0] : null;
+  }
+
   async getLowStockProducts(threshold: number = 10): Promise<any[]> {
     return this.executeKw('product.product', 'search_read', [
       [['qty_available', '<=', threshold], ['qty_available', '>', 0]],
     ], {
-      fields: ['id', 'name', 'list_price', 'qty_available', 'categ_id', 'default_code'],
+      fields: OdooClient.PRODUCT_FIELDS,
       limit: 50,
     });
   }
 
   /**
-   * Obtiene el ranking de ventas (top sellers) de los últimos N días via pos.order.line.
+   * Ranking de ventas combinando POS + eCommerce.
    */
-  async getSalesRanking(days: number = 30, limit: number = 10): Promise<any[]> {
+  async getSalesRanking(days: number = 30, limit: number = 10, source: 'all' | 'pos' | 'ecommerce' = 'all'): Promise<any[]> {
     const date = new Date();
     date.setDate(date.getDate() - days);
     const dateStr = date.toISOString().split('T')[0];
 
-    const orderLines = await this.executeKw('pos.order.line', 'search_read', [
-      [['order_id.date_order', '>=', dateStr], ['order_id.state', 'in', ['paid', 'done', 'invoiced']]],
-    ], {
-      fields: ['product_id', 'qty', 'price_subtotal_incl'],
-    });
+    const productSales: Record<number, { id: number; name: string; total_qty: number; total_revenue: number; source: string }> = {};
 
-    if (!orderLines || orderLines.length === 0) return [];
+    // POS sales
+    if (source === 'all' || source === 'pos') {
+      const posLines = await this.executeKw('pos.order.line', 'search_read', [
+        [['order_id.date_order', '>=', dateStr], ['order_id.state', 'in', ['paid', 'done', 'invoiced']]],
+      ], {
+        fields: ['product_id', 'qty', 'price_subtotal_incl'],
+      });
 
-    const productSales: Record<number, { id: number; name: string; total_qty: number; total_revenue: number }> = {};
-
-    for (const line of orderLines) {
-      const productId = line.product_id[0];
-      const productName = line.product_id[1];
-      if (!productSales[productId]) {
-        productSales[productId] = { id: productId, name: productName, total_qty: 0, total_revenue: 0 };
+      for (const line of posLines || []) {
+        const productId = line.product_id[0];
+        const productName = line.product_id[1];
+        if (!productSales[productId]) {
+          productSales[productId] = { id: productId, name: productName, total_qty: 0, total_revenue: 0, source: 'pos' };
+        }
+        productSales[productId].total_qty += line.qty || 0;
+        productSales[productId].total_revenue += line.price_subtotal_incl || 0;
       }
-      productSales[productId].total_qty += line.qty || 0;
-      productSales[productId].total_revenue += line.price_subtotal_incl || 0;
+    }
+
+    // eCommerce sales
+    if (source === 'all' || source === 'ecommerce') {
+      try {
+        const ecomLines = await this.executeKw('sale.order.line', 'search_read', [
+          [
+            ['order_id.date_order', '>=', dateStr],
+            ['order_id.state', 'in', ['sale', 'done']],
+            ['order_id.website_id', '!=', false],
+          ],
+        ], {
+          fields: ['product_id', 'product_uom_qty', 'price_subtotal'],
+        });
+
+        for (const line of ecomLines || []) {
+          const productId = line.product_id[0];
+          const productName = line.product_id[1];
+          if (!productSales[productId]) {
+            productSales[productId] = { id: productId, name: productName, total_qty: 0, total_revenue: 0, source: 'ecommerce' };
+          } else if (productSales[productId].source === 'pos') {
+            productSales[productId].source = 'both';
+          }
+          productSales[productId].total_qty += line.product_uom_qty || 0;
+          productSales[productId].total_revenue += line.price_subtotal || 0;
+        }
+      } catch {
+        // eCommerce module might not be installed
+      }
     }
 
     return Object.values(productSales)
@@ -179,114 +238,97 @@ class OdooClient {
   }
 
   /**
-   * Obtiene el historial de ventas POS con fecha/hora y monto.
-   * Permite a Claude analizar patrones temporales (día de semana, horario, etc).
+   * Historial de ventas POS + eCommerce.
    */
   async getSalesHistory(options: {
     dateFrom?: string;
     dateTo?: string;
     limit?: number;
-  } = {}): Promise<any[]> {
-    const filters: any[] = [
-      ['state', 'in', ['paid', 'done', 'invoiced']],
-    ];
+    source?: 'all' | 'pos' | 'ecommerce';
+  } = {}): Promise<{ pos_orders: any[]; ecom_orders: any[] }> {
+    const source = options.source || 'all';
+    let posOrders: any[] = [];
+    let ecomOrders: any[] = [];
 
-    if (options.dateFrom) {
-      filters.push(['date_order', '>=', options.dateFrom]);
-    }
-    if (options.dateTo) {
-      filters.push(['date_order', '<=', options.dateTo]);
-    }
+    if (source === 'all' || source === 'pos') {
+      const filters: any[] = [['state', 'in', ['paid', 'done', 'invoiced']]];
+      if (options.dateFrom) filters.push(['date_order', '>=', options.dateFrom]);
+      if (options.dateTo) filters.push(['date_order', '<=', options.dateTo]);
 
-    const orders = await this.executeKw('pos.order', 'search_read', [filters], {
-      fields: ['id', 'name', 'date_order', 'amount_total', 'amount_tax', 'partner_id', 'session_id', 'pos_reference'],
-      limit: options.limit || 500,
-      order: 'date_order desc',
-    });
-
-    return orders;
-  }
-
-  /**
-   * Obtiene el detalle de líneas de órdenes POS con fecha de la orden.
-   * Incluye producto, cantidad, precio y fecha para análisis granular.
-   */
-  async getSalesDetailHistory(options: {
-    dateFrom?: string;
-    dateTo?: string;
-    limit?: number;
-  } = {}): Promise<any[]> {
-    const filters: any[] = [
-      ['order_id.state', 'in', ['paid', 'done', 'invoiced']],
-    ];
-
-    if (options.dateFrom) {
-      filters.push(['order_id.date_order', '>=', options.dateFrom]);
-    }
-    if (options.dateTo) {
-      filters.push(['order_id.date_order', '<=', options.dateTo]);
+      posOrders = await this.executeKw('pos.order', 'search_read', [filters], {
+        fields: ['id', 'name', 'date_order', 'amount_total', 'amount_tax', 'partner_id', 'pos_reference'],
+        limit: options.limit || 500,
+        order: 'date_order desc',
+      });
     }
 
-    const lines = await this.executeKw('pos.order.line', 'search_read', [filters], {
-      fields: ['order_id', 'product_id', 'qty', 'price_subtotal_incl', 'create_date'],
-      limit: options.limit || 1000,
-      order: 'create_date desc',
-    });
+    if (source === 'all' || source === 'ecommerce') {
+      try {
+        const filters: any[] = [['website_id', '!=', false], ['state', 'in', ['sale', 'done']]];
+        if (options.dateFrom) filters.push(['date_order', '>=', options.dateFrom]);
+        if (options.dateTo) filters.push(['date_order', '<=', options.dateTo]);
 
-    return lines;
+        ecomOrders = await this.executeKw('sale.order', 'search_read', [filters], {
+          fields: ['id', 'name', 'date_order', 'amount_total', 'partner_id', 'state'],
+          limit: options.limit || 500,
+          order: 'date_order desc',
+        });
+      } catch {
+        // eCommerce module might not be installed
+      }
+    }
+
+    return { pos_orders: posOrders, ecom_orders: ecomOrders };
   }
 
   // ========== ESCRITURA ==========
 
-  /**
-   * Crea un producto en Odoo usando product.template.
-   */
-  async createProduct(product: {
-    name: string;
-    description: string;
-    cost_price: number;
-    sale_price: number;
-  }): Promise<number> {
-    return this.executeKw('product.template', 'create', [{
+  async createProduct(product: ProductInput): Promise<number> {
+    const vals: Record<string, any> = {
       name: product.name,
-      description_sale: product.description,
-      standard_price: product.cost_price,
-      list_price: product.sale_price,
-      type: 'consu',
-      sale_ok: true,
-      purchase_ok: true,
-    }]);
+      type: product.type || 'consu',
+      sale_ok: product.sale_ok ?? true,
+      purchase_ok: product.purchase_ok ?? true,
+    };
+
+    if (product.description) vals.description_sale = product.description;
+    if (product.cost_price !== undefined) vals.standard_price = product.cost_price;
+    if (product.sale_price !== undefined) vals.list_price = product.sale_price;
+    if (product.default_code) vals.default_code = product.default_code;
+    if (product.barcode) vals.barcode = product.barcode;
+    if (product.categ_id) vals.categ_id = product.categ_id;
+
+    return this.executeKw('product.template', 'create', [vals]);
   }
 
-  /**
-   * Crea múltiples productos y retorna el resultado de cada uno.
-   */
-  async createProducts(products: {
-    name: string;
-    description: string;
-    cost_price: number;
-    sale_price: number;
-  }[]): Promise<CreateProductResult[]> {
+  async createProducts(products: ProductInput[]): Promise<CreateProductResult[]> {
     const results: CreateProductResult[] = [];
 
     for (const product of products) {
       try {
         const odooId = await this.createProduct(product);
-        results.push({
-          name: product.name,
-          odoo_id: odooId,
-          status: 'created',
-        });
+        results.push({ name: product.name, odoo_id: odooId, status: 'created' });
       } catch (error: any) {
-        results.push({
-          name: product.name,
-          status: 'error',
-          error: error?.message || String(error),
-        });
+        results.push({ name: product.name, status: 'error', error: error?.message || String(error) });
       }
     }
 
     return results;
+  }
+
+  async updateProduct(id: number, values: Partial<ProductInput>): Promise<void> {
+    const vals: Record<string, any> = {};
+
+    if (values.name) vals.name = values.name;
+    if (values.description) vals.description_sale = values.description;
+    if (values.cost_price !== undefined) vals.standard_price = values.cost_price;
+    if (values.sale_price !== undefined) vals.list_price = values.sale_price;
+    if (values.default_code) vals.default_code = values.default_code;
+    if (values.barcode) vals.barcode = values.barcode;
+    if (values.categ_id) vals.categ_id = values.categ_id;
+    if (values.type) vals.type = values.type;
+
+    await this.executeKw('product.template', 'write', [[id], vals]);
   }
 }
 
