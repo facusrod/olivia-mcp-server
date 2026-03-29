@@ -10,16 +10,7 @@ export const getLowStock = createTool({
     threshold: z.number().optional().default(10).describe('Umbral de stock bajo (default: 10 unidades)'),
   }),
   outputSchema: z.object({
-    products: z.array(
-      z.object({
-        id: z.number(),
-        name: z.string(),
-        list_price: z.number(),
-        qty_available: z.number(),
-        categ_id: z.array(z.any()),
-        default_code: z.string().nullable(),
-      })
-    ),
+    products: z.array(z.any()),
     count: z.number(),
   }),
   mcp: {
