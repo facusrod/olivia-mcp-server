@@ -11,6 +11,7 @@ import { getProductById } from './tools/get-product.js';
 import { getLowStock } from './tools/low-stock.js';
 import { getSalesRanking } from './tools/sales-ranking.js';
 import { getSalesHistory } from './tools/sales-history.js';
+import { getExpiringProducts } from './tools/expiring-products.js';
 
 // Tools de escritura
 import { parseExcel } from './tools/parse-excel.js';
@@ -24,6 +25,7 @@ const tools = {
   getLowStock,
   getSalesRanking,
   getSalesHistory,
+  getExpiringProducts,
   // Parseo
   parseExcel,
   // Escritura

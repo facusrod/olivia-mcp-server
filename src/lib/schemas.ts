@@ -43,6 +43,18 @@ export const SalesRankingItemSchema = z.object({
   source: z.string(),
 });
 
+export const ExpiringLotSchema = z.object({
+  lot_id: z.number(),
+  lot_name: z.string(),
+  product_id: z.number(),
+  product_name: z.string(),
+  expiration_date: z.string().nullable(),
+  use_date: z.string().nullable(),
+  removal_date: z.string().nullable(),
+  alert_date: z.string().nullable(),
+  product_qty: z.number(),
+});
+
 export const PaginationSchema = z.object({
   has_more: z.boolean(),
   next_offset: z.number().nullable(),
@@ -52,3 +64,4 @@ export type OdooProduct = z.infer<typeof OdooProductSchema>;
 export type PosOrder = z.infer<typeof PosOrderSchema>;
 export type EcomOrder = z.infer<typeof EcomOrderSchema>;
 export type SalesRankingItem = z.infer<typeof SalesRankingItemSchema>;
+export type ExpiringLot = z.infer<typeof ExpiringLotSchema>;

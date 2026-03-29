@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Readable } from 'stream';
 import { createRequire } from 'module';
-import type { OdooProduct, SalesRankingItem, PosOrder, EcomOrder } from './schemas.js';
+import type { OdooProduct, SalesRankingItem, PosOrder, EcomOrder, ExpiringLot } from './schemas.js';
 
 const require = createRequire(import.meta.url);
 const Serializer = require('xmlrpc/lib/serializer');
@@ -294,6 +294,56 @@ class OdooClient {
     }
 
     return { pos_orders: posOrders || [], ecom_orders: ecomOrders || [] };
+  }
+
+  /**
+   * Productos próximos a vencer consultando stock.lot.
+   * Requiere que el módulo de fechas de vencimiento esté habilitado en Odoo.
+   */
+  private static readonly LOT_EXPIRY_FIELDS = [
+    'id', 'name', 'product_id', 'expiration_date', 'use_date',
+    'removal_date', 'alert_date', 'product_qty',
+  ];
+
+  async getExpiringProducts(options: {
+    days?: number;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<ExpiringLot[]> {
+    const days = options.days ?? 30;
+    const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
+
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + days);
+    const futureDateStr = futureDate.toISOString().replace('T', ' ').slice(0, 19);
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    const raw = await this.executeKw('stock.lot', 'search_read', [
+      [
+        ['expiration_date', '!=', false],
+        ['expiration_date', '>=', nowStr],
+        ['expiration_date', '<=', futureDateStr],
+        ['product_qty', '>', 0],
+      ],
+    ], {
+      fields: OdooClient.LOT_EXPIRY_FIELDS,
+      limit,
+      offset,
+      order: 'expiration_date asc',
+    });
+
+    return (raw || []).map((lot: any) => ({
+      lot_id: lot.id,
+      lot_name: lot.name,
+      product_id: lot.product_id?.[0] ?? 0,
+      product_name: lot.product_id?.[1] ?? '',
+      expiration_date: typeof lot.expiration_date === 'string' ? lot.expiration_date : null,
+      use_date: typeof lot.use_date === 'string' ? lot.use_date : null,
+      removal_date: typeof lot.removal_date === 'string' ? lot.removal_date : null,
+      alert_date: typeof lot.alert_date === 'string' ? lot.alert_date : null,
+      product_qty: lot.product_qty ?? 0,
+    }));
   }
 
   // ========== ESCRITURA ==========
