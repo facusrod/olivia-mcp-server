@@ -1,5 +1,9 @@
+import { createRequire } from 'module';
 import { Mastra } from '@mastra/core';
 import { MCPServer } from '@mastra/mcp';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../../package.json');
 
 // Tools de lectura
 import { searchProducts } from './tools/search-products.js';
@@ -30,7 +34,7 @@ const tools = {
 export const mcpServer = new MCPServer({
   id: 'olivia-products',
   name: 'Olivia Products MCP Server',
-  version: '1.1.0',
+  version,
   description: 'Tools para consultar productos/ventas (POS + eCommerce) y crear/actualizar productos en Odoo 18',
   tools,
 });

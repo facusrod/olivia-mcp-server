@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Readable } from 'stream';
 import { createRequire } from 'module';
+import type { OdooProduct } from './schemas.js';
 
 const require = createRequire(import.meta.url);
 const Serializer = require('xmlrpc/lib/serializer');
@@ -37,13 +38,13 @@ export interface CreateProductResult {
  * Odoo devuelve `false` en vez de null para campos vacíos.
  * Esta función normaliza esos campos a null.
  */
-export function cleanOdooProduct(p: any): any {
+export function cleanOdooProduct(p: Record<string, unknown>): OdooProduct {
   return {
     ...p,
     default_code: typeof p.default_code === 'string' ? p.default_code : null,
     barcode: typeof p.barcode === 'string' ? p.barcode : null,
     description_sale: typeof p.description_sale === 'string' ? p.description_sale : null,
-  };
+  } as OdooProduct;
 }
 
 class OdooClient {
@@ -159,7 +160,7 @@ class OdooClient {
     'categ_id', 'default_code', 'barcode', 'description_sale', 'type',
   ];
 
-  async searchProducts(query: string, limit: number = 20, offset: number = 0): Promise<any[]> {
+  async searchProducts(query: string, limit: number = 20, offset: number = 0): Promise<OdooProduct[]> {
     const raw = await this.executeKw('product.product', 'search_read', [
       ['|', '|', ['name', 'ilike', query], ['default_code', 'ilike', query], ['barcode', 'ilike', query]],
     ], {
@@ -170,7 +171,7 @@ class OdooClient {
     return (raw || []).map(cleanOdooProduct);
   }
 
-  async getProductById(id: number): Promise<any | null> {
+  async getProductById(id: number): Promise<OdooProduct | null> {
     const products = await this.executeKw('product.product', 'search_read', [
       [['id', '=', id]],
     ], {
@@ -180,7 +181,7 @@ class OdooClient {
     return products.length > 0 ? cleanOdooProduct(products[0]) : null;
   }
 
-  async getLowStockProducts(threshold: number = 10, limit: number = 50, offset: number = 0): Promise<any[]> {
+  async getLowStockProducts(threshold: number = 10, limit: number = 50, offset: number = 0): Promise<OdooProduct[]> {
     const raw = await this.executeKw('product.product', 'search_read', [
       [['qty_available', '<=', threshold], ['qty_available', '>', 0]],
     ], {
