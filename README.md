@@ -42,6 +42,7 @@ Las variables `CF_ACCESS_*` son opcionales (solo si Odoo está detrás de Cloudf
 | `odoo_get_low_stock` | Productos con stock bajo |
 | `odoo_get_sales_ranking` | Top productos vendidos (POS + eCommerce) |
 | `odoo_get_sales_history` | Historial de ventas con fecha/hora |
+| `odoo_get_expiring_products` | Productos próximos a vencer (por lote) |
 
 ### Escritura (requieren confirmación)
 
@@ -61,6 +62,7 @@ Las tools de listado soportan `offset` y devuelven `has_more` + `next_offset`.
 - "Cuáles son los más vendidos del mes?"
 - "Qué productos tienen stock bajo?"
 - "Los sábados se vende más a la mañana o a la tarde?"
+- "Qué productos vencen en los próximos 15 días?"
 - "Importame estos productos del Excel" (adjuntar .xlsx)
 
 ## Desarrollo
