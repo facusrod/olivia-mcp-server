@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getOdooClient } from '../../lib/odoo-client.js';
+import { getOdooClient } from '../../lib/odoo/index.js';
 import { OdooProductSchema, PaginationSchema } from '../../lib/schemas.js';
 
 export const getLowStock = createTool({

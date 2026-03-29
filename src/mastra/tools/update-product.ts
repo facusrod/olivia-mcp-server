@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getOdooClient } from '../../lib/odoo-client.js';
+import { getOdooClient } from '../../lib/odoo/index.js';
 
 export const updateProduct = createTool({
   id: 'odoo_update_product',
