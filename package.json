@@ -1,6 +1,6 @@
 {
   "name": "@facusrod/olivia-mcp-server",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "MCP Server para consultar productos/ventas y crear productos en Odoo 18",
   "type": "module",
   "bin": {
