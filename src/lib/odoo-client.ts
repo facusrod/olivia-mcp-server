@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Readable } from 'stream';
 import { createRequire } from 'module';
-import type { OdooProduct } from './schemas.js';
+import type { OdooProduct, SalesRankingItem, PosOrder, EcomOrder } from './schemas.js';
 
 const require = createRequire(import.meta.url);
 const Serializer = require('xmlrpc/lib/serializer');
@@ -192,7 +192,7 @@ class OdooClient {
     return (raw || []).map(cleanOdooProduct);
   }
 
-  async getSalesRanking(days: number = 30, limit: number = 10, source: 'all' | 'pos' | 'ecommerce' = 'all'): Promise<any[]> {
+  async getSalesRanking(days: number = 30, limit: number = 10, source: 'all' | 'pos' | 'ecommerce' = 'all'): Promise<SalesRankingItem[]> {
     const date = new Date();
     date.setDate(date.getDate() - days);
     const dateStr = date.toISOString().split('T')[0];
@@ -256,7 +256,7 @@ class OdooClient {
     limit?: number;
     offset?: number;
     source?: 'all' | 'pos' | 'ecommerce';
-  } = {}): Promise<{ pos_orders: any[]; ecom_orders: any[] }> {
+  } = {}): Promise<{ pos_orders: PosOrder[]; ecom_orders: EcomOrder[] }> {
     const source = options.source || 'all';
     const limit = options.limit || 500;
     const offset = options.offset || 0;

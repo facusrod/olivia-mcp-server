@@ -32,7 +32,7 @@ const tools = {
 };
 
 export const mcpServer = new MCPServer({
-  id: 'olivia-products',
+  id: 'odoo-mcp-server',
   name: 'Olivia Products MCP Server',
   version,
   description: 'Tools para consultar productos/ventas (POS + eCommerce) y crear/actualizar productos en Odoo 18',
@@ -41,5 +41,5 @@ export const mcpServer = new MCPServer({
 
 export const mastra = new Mastra({
   tools,
-  mcpServers: { 'olivia-products': mcpServer },
+  mcpServers: { 'odoo-mcp-server': mcpServer },
 });

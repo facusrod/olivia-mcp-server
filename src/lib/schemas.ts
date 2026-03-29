@@ -49,3 +49,6 @@ export const PaginationSchema = z.object({
 });
 
 export type OdooProduct = z.infer<typeof OdooProductSchema>;
+export type PosOrder = z.infer<typeof PosOrderSchema>;
+export type EcomOrder = z.infer<typeof EcomOrderSchema>;
+export type SalesRankingItem = z.infer<typeof SalesRankingItemSchema>;
