@@ -11,7 +11,6 @@ if (!API_KEY) {
 }
 
 function authenticate(req: http.IncomingMessage): boolean {
-  // Acepta el token en header Authorization: Bearer <key>
   const authHeader = req.headers['authorization'];
   if (!authHeader) return false;
 
@@ -22,40 +21,55 @@ function authenticate(req: http.IncomingMessage): boolean {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS para clientes remotos
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  const method = req.method || 'UNKNOWN';
+  const url = req.url || '/';
+  console.log(`[${new Date().toISOString()}] ${method} ${url}`);
 
-  if (req.method === 'OPTIONS') {
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, Mcp-Session-Id');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+
+  if (method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
     return;
   }
 
   // Health check (sin auth)
-  if (req.url === '/health') {
+  if (url === '/health' || url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', server: 'olivia-mcp-server' }));
     return;
   }
 
-  // Autenticación para todas las rutas MCP
+  // Autenticación para rutas MCP
   if (!authenticate(req)) {
+    console.log(`[${new Date().toISOString()}] 401 Unauthorized`);
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized: API key inválida o faltante' }));
     return;
   }
 
   // Delegar al MCP server de Mastra
-  const url = new URL(req.url || '', `http://localhost:${PORT}`);
-  await mcpServer.startHTTP({
-    url,
-    httpPath: '/mcp',
-    req,
-    res,
-    options: { serverless: false },
-  });
+  try {
+    const parsedUrl = new URL(url, `http://localhost:${PORT}`);
+    console.log(`[${new Date().toISOString()}] Delegando a MCP server: ${method} ${parsedUrl.pathname}`);
+    await mcpServer.startHTTP({
+      url: parsedUrl,
+      httpPath: '/mcp',
+      req,
+      res,
+      options: { serverless: true },
+    });
+  } catch (error: any) {
+    console.error(`[${new Date().toISOString()}] Error en MCP:`, error?.message || error);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal server error', details: error?.message }));
+    }
+  }
 });
 
 server.listen(PORT, () => {
