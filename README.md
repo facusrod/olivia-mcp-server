@@ -1,6 +1,10 @@
 # @facusrod/olivia-mcp-server
 
+[![npm version](https://img.shields.io/npm/v/@facusrod/olivia-mcp-server)](https://www.npmjs.com/package/@facusrod/olivia-mcp-server)
+
 MCP Server para conectar Claude Desktop con Odoo 18. Permite consultar productos, analizar ventas (POS + eCommerce), y crear/actualizar productos directamente desde el chat.
+
+> Disponible en npm: [@facusrod/olivia-mcp-server](https://www.npmjs.com/package/@facusrod/olivia-mcp-server)
 
 ## Instalación
 
